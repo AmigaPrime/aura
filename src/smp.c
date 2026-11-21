@@ -494,6 +494,45 @@ struct aura_s2r_mailbox {
 
 static struct aura_s2r_mailbox s2r_mailbox SMP_SHARED ALIGNED(64);
 
+/*
+ * T8103: Linux's sleep notes each step in the PMU's scratch pad (0xa1a0, step at +1), and
+ * the wake's first steps are aura's. Found from the ADT at publish time; written with the
+ * raw gen-1 SPMI command, no allocation and no printing, as the reset path must.
+ */
+#define S2R_NOTE_STEP   0xa1a1
+#define S2R_NOTE_USID   0xf
+static u64 s2r_note_spmi SMP_SHARED;
+
+static void s2r_note(u8 step)
+{
+    u64 b = s2r_note_spmi;
+    int i;
+
+    if (!b)
+        return;
+    for (i = 0; i < 16 && !(read32(b) & BIT(24)); i++)
+        read32(b + 8);
+    write32(b + 4, 0x30 | (S2R_NOTE_USID << 8) | BIT(15) | ((u32)S2R_NOTE_STEP << 16));
+    write32(b + 4, step);
+    for (i = 0; i < 1000 && (read32(b) & BIT(24)); i++)
+        udelay(10);
+    if (!(read32(b) & BIT(24)))
+        read32(b + 8);
+}
+
+static void s2r_note_find(void)
+{
+    int path[8];
+    u64 base;
+
+    if (chip_id != T8103)
+        return;
+    if (adt_path_offset_trace(adt, "/arm-io/nub-spmi", path) < 0 ||
+        adt_get_reg(adt, path, "reg", 0, &base, NULL) < 0)
+        return;
+    s2r_note_spmi = base;
+}
+
 /* Returns the mailbox's physical address: aura's mapping is the identity. */
 u64 smp_s2r_publish(void)
 {
@@ -501,6 +540,8 @@ u64 smp_s2r_publish(void)
     s2r_mailbox.boot_mpidr = mrs(MPIDR_EL1) & 0xFFFFFF;
     s2r_mailbox.resume_pa = 0;
     s2r_mailbox.resumes = 0;
+    s2r_note_find();
+    dc_cvac_range(&s2r_note_spmi, sizeof(s2r_note_spmi));
     dc_cvac_range(&s2r_mailbox, sizeof(s2r_mailbox));
     sysop("dsb sy");
     return (u64)&s2r_mailbox;
@@ -525,8 +566,10 @@ void smp_s2r_return_to_os(void)
     /* exception_initialize() unmasked everything. */
     msr(DAIF, 0xf << 6);
 
+    s2r_note(0xb0);
     /* A reset the OS didn't arm: reboot rather than guess what state it's in. */
     bool armed = entry && (mrs(MPIDR_EL1) & 0xFFFFFF) == s2r_mailbox.boot_mpidr;
+    s2r_note(armed ? 0xb1 : 0xb2);
     /*
      * One line on the always-on DockChannel only: USB and the display are the OS's. Only
      * if it fits: with nobody draining the FIFO (a T6040, whose OS keeps the DockChannel
