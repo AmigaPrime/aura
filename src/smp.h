@@ -58,6 +58,7 @@ bool smp_resets_return_here(void);
 const char *smp_s2r_why(void);
 u64 smp_s2r_publish(void);
 bool smp_s2r_published(void);
+void smp_s2r_note(u8 step);
 void smp_s2r_return_to_os(void) __attribute__((noreturn));
 void smp_set_wfe_mode(bool new_mode);
 void smp_send_ipi(int cpu);

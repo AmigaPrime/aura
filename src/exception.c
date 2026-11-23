@@ -169,8 +169,10 @@ void exception_initialize(void)
 
     /* Initial T8152 bring-up polls KIS without configuring the AIC. A core reset while the
      * virtualized SPTM's guest is live must not take the guest's interrupts at EL2. */
-    if (is_boot_cpu() && chip_id != T8152 && !sptm_virt_guest_live)
+    if (is_boot_cpu() && chip_id != T8152 && !sptm_virt_guest_live && !smp_s2r_published())
         msr(DAIF, 0 << 6); // Enable SError, IRQ and FIQ
+    else if (smp_s2r_published())
+        msr(DAIF, 0xf << 6); // Keep everything masked when returning to the OS
     else
         msr(DAIF, 3 << 6); // Disable IRQ and FIQ
 
@@ -186,6 +188,8 @@ void exception_initialize(void)
                       BIT(4) |  // IMO
                       BIT(3));  // FMO
         );
+        sysop("isb");
+        msr(VBAR_EL2, _vectors_start);
         // Set up exception forwarding from EL1
         msr(VBAR_EL12, _el1_vectors_start);
         sysop("isb");

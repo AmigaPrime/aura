@@ -503,8 +503,9 @@ static struct aura_s2r_mailbox s2r_mailbox SMP_SHARED ALIGNED(64);
 #define S2R_NOTE_USID   0xf
 static u64 s2r_note_spmi SMP_SHARED;
 
-static void s2r_note(u8 step)
+void smp_s2r_note(u8 step)
 {
+    return;
     u64 b = s2r_note_spmi;
     int i;
 
@@ -566,17 +567,15 @@ void smp_s2r_return_to_os(void)
     /* exception_initialize() unmasked everything. */
     msr(DAIF, 0xf << 6);
 
-    s2r_note(0xb0);
+    smp_s2r_note(0xb0);
     /* A reset the OS didn't arm: reboot rather than guess what state it's in. */
     bool armed = entry && (mrs(MPIDR_EL1) & 0xFFFFFF) == s2r_mailbox.boot_mpidr;
-    s2r_note(armed ? 0xb1 : 0xb2);
+    smp_s2r_note(armed ? 0xb1 : 0xb2);
     /*
      * One line on the always-on DockChannel only: USB and the display are the OS's. Only
      * if it fits: with nobody draining the FIFO (a T6040, whose OS keeps the DockChannel
      * off), a waiting write held the boot core here until the SMC watchdog reset the SoC.
      */
-    dockchannel_uart_try_puts(armed ? "aura: S2R wake, resuming the OS"
-                                    : "aura: S2R reset not armed, rebooting");
     if (!armed)
         reboot();
 

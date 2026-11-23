@@ -278,6 +278,8 @@ void _cpu_reset_c(void *stack)
     }
 #endif
     bool quiet = (chip_id == T8142 && !is_boot_cpu()) || smp_s2r_published();
+    if (is_boot_cpu() && smp_s2r_published())
+        smp_s2r_note(0xae);
     if (!quiet) {
         if (!is_boot_cpu())
             uart_puts("RVBAR entry on secondary CPU");
@@ -288,6 +290,8 @@ void _cpu_reset_c(void *stack)
         printf("  MPIDR: 0x%lx\n", mrs(MPIDR_EL1));
     }
     init_cpu();
+    if (is_boot_cpu() && smp_s2r_published())
+        smp_s2r_note(0xaf);
     if (!quiet)
         printf("  Running in EL%lu\n\n", mrs(CurrentEL) >> 2);
 

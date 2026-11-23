@@ -2,6 +2,7 @@
 
 #include "wdt.h"
 #include "adt.h"
+#include "smp.h"
 #include "types.h"
 #include "utils.h"
 
@@ -61,6 +62,8 @@ void wdt_reboot(void)
     if (!wdt_base)
         return;
 
+    if (smp_s2r_published())
+        smp_s2r_note(0xee);
     write32(wdt_base + WDT_ALARM, 0x100000);
     write32(wdt_base + WDT_COUNT, 0);
     write32(wdt_base + WDT_CTL, 4);
